@@ -12,9 +12,12 @@ const port = 4004;
 app.use(cors());
 app.use(express.json());
 
-let ledStatePin6 = false;
-let ledStatePin7 = false;
-let ledStateBuiltIn = false;
+let digitalPinStates = {
+    pin6: false,
+    pin7: false,
+    pin13: false // Built-in LED
+  };
+  
 
 // Placeholder code
 let arduinoCode = `
@@ -81,33 +84,27 @@ async function compileAndRunCode(sketch) {
 
     // Listen to Port D for pin 6 and 7 state changes
     portD.addListener(() => {
-        ledStatePin7 = portD.pinState(7) === PinState.High;
-        ledStatePin6 = portD.pinState(6) === PinState.High;
-        console.log(`LED Pin 7: ${ledStatePin7 ? 'ON' : 'OFF'}, LED Pin 6: ${ledStatePin6 ? 'ON' : 'OFF'}`);
+        digitalPinStates.pin6 = portD.pinState(6) === PinState.High;
+        digitalPinStates.pin7 = portD.pinState(7) === PinState.High;
+        console.log(`LED Pin 7: ${digitalPinStates.pin7 ? 'ON' : 'OFF'}, LED Pin 6: ${digitalPinStates.pin6 ? 'ON' : 'OFF'}`);
     });
 
     // Listen to Port B for the built-in LED state change
     portB.addListener(() => {
-        ledStateBuiltIn = portB.pinState(5) === PinState.High; // Pin 13 is PB5 on Port B
-        console.log(`LED Builtin: ${ledStateBuiltIn ? 'ON' : 'OFF'}`);
+        digitalPinStates.pin13 = portB.pinState(5) === PinState.High; // Pin 13 is PB5 on Port B
+        console.log(`LED Builtin: ${digitalPinStates.pin13 ? 'ON' : 'OFF'}`);
     });
 
 
     // Function to send LED states to clients
-    function sendLedStates() {
-        if (wss.clients) {
-            wss.clients.forEach(client => {
-                if (client.readyState === WebSocket.OPEN) {
-                    client.send(JSON.stringify({
-                        type: 'led-states',
-                        ledStatePin7,
-                        ledStatePin6,
-                        ledStateBuiltIn
-                    }));
-                }
-            });
-        }
-    }
+    function sendPinStates() {
+        wss.clients.forEach(client => {
+          if (client.readyState === WebSocket.OPEN) {
+            client.send(JSON.stringify({ type: 'pin-states', ...digitalPinStates }));
+          }
+        });
+      }
+      
     // Run the simulation
     while (simulationShouldContinue) {
         for (let i = 0; i < 500000; i++) {
@@ -116,7 +113,7 @@ async function compileAndRunCode(sketch) {
             timer.tick();
         }
         if (!globalCpu) break;
-        sendLedStates();
+        sendPinStates();
         await new Promise(resolve => setTimeout(resolve, 0));
     }
     
