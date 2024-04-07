@@ -13,6 +13,12 @@ app.use(cors());
 app.use(express.json());
 
 let digitalPinStates = {
+    pin0: false,
+    pin1: false,
+    pin2: false,
+    pin3: false,
+    pin4: false,
+    pin5: false,
     pin6: false,
     pin7: false,
     pin13: false // Built-in LED
@@ -84,8 +90,9 @@ async function compileAndRunCode(sketch) {
 
     // Listen to Port D for pin 6 and 7 state changes
     portD.addListener(() => {
-        digitalPinStates.pin6 = portD.pinState(6) === PinState.High;
-        digitalPinStates.pin7 = portD.pinState(7) === PinState.High;
+        for (let pin = 0; pin <= 7; pin++) {
+            digitalPinStates[`pin${pin}`] = portD.pinState(pin) === PinState.High;
+        }
         console.log(`LED Pin 7: ${digitalPinStates.pin7 ? 'ON' : 'OFF'}, LED Pin 6: ${digitalPinStates.pin6 ? 'ON' : 'OFF'}`);
     });
 
