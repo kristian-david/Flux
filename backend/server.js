@@ -27,22 +27,38 @@ let digitalPinStates = {
 
 // Placeholder code
 let arduinoCode = `
+bool builtInLedState = false; // Tracks the current state of the built-in LED
+int lastButtonState = LOW;    // Tracks the last state of the button
+
 void setup() {
-    pinMode(7, OUTPUT);
-    pinMode(6, OUTPUT);
-    pinMode(13, OUTPUT);
+  pinMode(7, OUTPUT);
+  pinMode(6, OUTPUT);
+  pinMode(13, OUTPUT); // Setup for built-in LED
+  pinMode(2, INPUT);   // Setup for pushbutton
+}
+
+void loop() {
+  // Blink LEDs on pin 6 and 7
+  digitalWrite(7, HIGH);
+  digitalWrite(6, HIGH);
+  delay(1000);
+  digitalWrite(7, LOW);
+  digitalWrite(6, LOW);
+  delay(1000);
+
+  // Read the state of the pushbutton
+  int buttonState = digitalRead(2);
+  
+  // Check if the button state changed from LOW to HIGH (button press)
+  if (buttonState == HIGH && lastButtonState == LOW) {
+    builtInLedState = !builtInLedState; // Toggle the state of the built-in LED
+    digitalWrite(13, builtInLedState ? HIGH : LOW); // Set the built-in LED state
+    delay(50); // Debounce delay
   }
   
-  void loop() {
-    digitalWrite(7, HIGH);
-    digitalWrite(6, HIGH);
-    digitalWrite(13, HIGH);
-    delay(1000);
-    digitalWrite(7, LOW);
-    digitalWrite(6, LOW);
-    digitalWrite(13, LOW);
-    delay(1000);
-  }
+  lastButtonState = buttonState; // Save the current state as the last state, for next time through the loop
+}
+
 `;
 
 let simulationRunning = false;
@@ -93,24 +109,17 @@ async function compileAndRunCode(sketch) {
         for (let pin = 0; pin <= 7; pin++) {
             digitalPinStates[`pin${pin}`] = portD.pinState(pin) === PinState.High;
         }
-        console.log(`LED Pin 7: ${digitalPinStates.pin7 ? 'ON' : 'OFF'}, LED Pin 6: ${digitalPinStates.pin6 ? 'ON' : 'OFF'}`);
+        // console.log(`LED Pin 7: ${digitalPinStates.pin7 ? 'ON' : 'OFF'}, LED Pin 6: ${digitalPinStates.pin6 ? 'ON' : 'OFF'}`);
     });
 
     // Listen to Port B for the built-in LED state change
     portB.addListener(() => {
         digitalPinStates.pin13 = portB.pinState(5) === PinState.High; // Pin 13 is PB5 on Port B
-        console.log(`LED Builtin: ${digitalPinStates.pin13 ? 'ON' : 'OFF'}`);
+        // console.log(`LED Builtin: ${digitalPinStates.pin13 ? 'ON' : 'OFF'}`);
     });
 
 
-    // Function to send LED states to clients
-    function sendPinStates() {
-        wss.clients.forEach(client => {
-          if (client.readyState === WebSocket.OPEN) {
-            client.send(JSON.stringify({ type: 'pin-states', ...digitalPinStates }));
-          }
-        });
-      }
+
       
     // Run the simulation
     while (simulationShouldContinue) {
@@ -128,6 +137,15 @@ async function compileAndRunCode(sketch) {
     console.log("Simulation stopped.");
 }
 
+// Function to send LED states to clients
+function sendPinStates() {
+    wss.clients.forEach(client => {
+        if (client.readyState === WebSocket.OPEN) {
+        client.send(JSON.stringify({ type: 'pin-states', ...digitalPinStates }));
+        }
+    });
+    }
+
 function stopSimulation() {
     console.log("Stop");
     if (simulationRunning) {
@@ -136,6 +154,19 @@ function stopSimulation() {
         console.log("Simulation stop requested.");
     }
 }
+
+// This function simulates changing the input state of a pin and reacting to it
+function handleInputChange(pin, state) {
+    console.log(`Simulating input change on pin ${pin} to state ${state}`);
+    // For this example, let's assume pin 2 is connected to the built-in LED
+    if (pin === 2) {
+        // Toggle built-in LED based on the state
+        digitalPinStates.pin13 = state; // Simulate the input directly changing the LED state
+        sendPinStates(); // Immediately send updated states after handling input change
+    }
+
+}
+
 
 // Create an HTTP server
 const server = http.createServer(app);
@@ -152,6 +183,9 @@ wss.on('connection', function connection(ws) {
             compileAndRunCode(data.sketch);
         } else if (data.type === 'stop-code') {
             stopSimulation();
+        } else if (data.type === 'input-change') {
+             // Assuming the message format is { type: 'input-change', pin: 2, state: true/false }
+             handleInputChange(data.pin, data.state);
         }
     });
 
